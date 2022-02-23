@@ -1,0 +1,288 @@
+---
+title: "Logistic Regression with Graduate Student"
+author: "Md Mominul Islam"
+date: "2/22/2022"
+output:
+  word_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Project Goal: In the file you will find a few hundred pieces of data.  This is a fictitious student admissions dataset.  The columns are defined as follows:
+
+ID:  This is the ID.  
+Cohort: Semester of Enrollment
+Admission:  1= student applied and was admitted to SDSU.  0 = student applied and was not admitted.
+Enrolled:  1= admitted student subsequently enrolled in courses and was counted as part of the freshman ‘cohort’.  0 = otherwise.
+HSGPA:  This is the student’s High School GPA.  
+ACT:  This is the student’s ACT score for entrance examination.
+Graduated:  1 = graduated 
+
+
+Answer:
+
+
+```{r chunk 1}
+#cleaning data
+##Loading data set
+SDSU.student <- read.csv("/Users/mominul/Library/CloudStorage/OneDrive-SouthDakotaStateUniversity-SDSU/STAT 551 Predictive Analytics/Logistic Regression/logistic.csv")
+dim(SDSU.student)
+#Missing values
+a<- SDSU.student
+# Remove null  & NA values
+x.dat<- a[!(is.na(a$Graduated) | a$ACT=="NULL") | a$enrolled=="n/a", ]
+# Adding a new column as ID
+x.dat$newID <- 1:233
+#remove rows with typos
+new.dat<- x.dat[-c(32, 63, 89), ]
+```
+
+-112 missing values in our data set
+- There are two typos in HSGPA column
+
+```{r chunk 2}
+## Exploratory Analysis of Categorical Data
+## Cohort Column
+unique(new.dat$Cohort)
+tab.cohort<- table(new.dat$Cohort)
+barplot(tab.cohort, 
+        main="Cohorts throuhout the Semester", 
+        xlab = "Semester",
+        ylab="Number of Students")
+
+##Enrolled column
+tab.enroll <- table(new.dat$enrolled)
+tab.enroll
+barplot(tab.enroll, 
+        main="Enrolled Students", 
+        ylab="Number of Students")
+
+##Graduate column
+tab.grad <- table(new.dat$Graduated)
+tab.grad
+barplot(tab.grad, 
+        main="Graduated Students", 
+        ylab="Number of Students")
+
+```
+
+We have 4 semester data, 
+
+We have 230 students, out of which 91 of them graduated and 139 didn't
+
+```{r chunk 3}
+# Lets take a look at the data
+str(new.dat)
+new.dat$ACTn <- as.numeric(new.dat$ACT)
+df <- subset(new.dat, select = -c(ID,ACT))
+# Some basic statistics
+summary(df)
+ # standard deviation
+sapply(df, sd)
+# Two-way contigency table, to ensure no 0 cells
+xtabs(~Graduated + enrolled, data=df)
+```
+
+
+```{r}
+#Histogram of Education, Experience, Wage
+
+hist(df$ACTn, main = 'Histogram of ACT',
+     xlab='ACT Score')
+hist(df$HSGPA, main = 'Histogram of HSGPA',
+     xlab='High School GPA')
+
+```
+
+
+```{r chunk 4}
+library(plyr)
+ddply(df,~Graduated,
+      summarise,
+      MeanAct=mean(ACTn),
+      MeanGPA=mean(HSGPA) )
+
+library(corrplot)
+library(RColorBrewer)
+M <-cor(df[,c(4,5,7)])
+corrplot(M, type="upper", order="hclust",
+         col=brewer.pal(n=8, name="RdYlBu"))
+
+
+```
+
+Now we will produce boxplots and density plots of the two numeric variables.
+
+Figure 3 shows the boxplot and density plot of two numeric variables. For better visualization, we produced
+two separate plots for each group of the target
+
+```{r chunk 5}
+library(ggplot2)
+# Box plot for GPA
+gpa.plot<-ggplot(df, aes(x=as.factor(Graduated), 
+                  y=HSGPA, 
+                  fill = as.factor(Graduated))) +
+  geom_boxplot()+
+  labs(title="High School GPA",x="Graduated(0 and 1 Factor)", y = "GPA")
+gpa.plot
+
+# Box plot for ACT Score
+ACT.plot<-ggplot(df, aes(x=as.factor(Graduated), 
+                  y=ACTn, 
+                  fill = as.factor(Graduated))) +
+  geom_boxplot()+
+  labs(title="ACT Score",x="Graduated(0 and 1 Factor)", y = "ACT Score")
+ACT.plot
+```
+
+
+
+```{r chunk 6}
+# Fit the first logit model
+logit1 <- glm(Graduated ~ HSGPA + ACTn, data=df, family = 'binomial')
+summary(logit1)
+```
+
+Excellent, these are rather strong looking results. We see that all the variables are significant. Using the coefficients we can begin to interpret the meaning of the results. R outputs these as log odds.
+
+For every one unit change in gre, the log odds of admission increases by 0.0022.
+For every one unit increase in gpa, the log odds of being admitted increases by 0.804.
+The rank variables have a slightly different interpretation. If you attended a rank 2, versus a rank 1, changes the log odds of admission by -0.675. Recall with dummy variables, that we are treating rank 1 as the baseline feature. So all the visible ranks are in reference to rank 1.
+Next we can use the confint function to obtain confidence intervals for the coefficient estimates. For logistic regression, these are based on the log-likelihood function. We could also get confidence using the standard errors.
+
+Parameter interpretation
+bH2SConc = 1.15 and exp(1.15) = 3.16. So, with a unit increase of hydrogen sulphide concentration, the odd
+of the taste of the cheese being good increases by 216%.
+bLacticConclow = −2.34. Now LacticConc is a categorical variable with two levels. Since we see the estimate
+for low level, the other level, high was taken as reference. exp(−2.34) = 0.096. So, the odd of cheese being
+good with low lactic acid concentration is only 9.6% of the odd of cheese being good with a high lactic acid
+concentration.
+
+```{r chunk 7, warning=FALSE}
+confint(logit1) # Using LL
+```
+
+```{r chunk 8}
+log_odds=predict(logit1, newdata = df)
+## check few of them
+log_odds[1:5]
+
+## calculate probabilities by logistic transformation
+## write a function for logistic tranformation
+logistic=function(x){1/(1+exp(-x))}
+## calculate probability of being good
+prob_being_good=logistic(log_odds)
+## check first 5
+prob_being_good[1:5]
+```
+
+```{r chunk 9}
+cutoff=0.5
+predicted_class=ifelse(prob_being_good<cutoff, 0, 1)
+original_class=df$Graduated
+## make a confusion/contingency matrix
+con_mat=table(original_class, predicted_class)
+con_mat
+```
+
+```{r chunk 10}
+#Validation of model: training and testing
+## Splitting data into train and test
+## 70% of the data into training data  
+set.seed(1)
+data.sort= sort(sample(nrow(df), nrow(df)*.7))
+## tarin data
+train.dat<-df[data.sort,]
+#test data
+test.dat<-df[-data.sort,]
+
+
+model=glm(Graduated ~ HSGPA + ACTn, 
+          data=train.dat,
+          family=binomial) # make a mogistic model
+
+pred_log_odd_test=predict(model, newdata = test.dat) ## log odds
+pred_probs_test=logistic(pred_log_odd_test) ## calculate probability
+cutoff=0.5 ## set cutoff
+pred_class_test=ifelse(pred_probs_test<cutoff, 0, 1)
+original_class_test=test.dat$Graduated
+table(original_class_test,pred_class_test)
+```
+
+```{r Tree model}
+
+#Loading Library
+library(rpart)
+library(maptree)
+library(faraway)
+library(ggcorrplot)
+library(psych)
+#Tree
+tree=rpart(Graduated ~ HSGPA + ACTn,data=df)
+tree
+
+draw.tree (tree, cex=.3, 
+           nodeinfo=TRUE, units="GradRate",
+           cases="obs",
+           digits=2, print.levels=TRUE,
+           new=TRUE)
+
+pruned=clip.rpart(tree,best=7)
+pruned
+draw.tree (pruned, cex=.3, 
+           nodeinfo=TRUE, units="GradRate",
+           cases="obs",
+           digits=1, print.levels=TRUE,
+           new=TRUE)
+
+
+```
+```{r}
+## Logistic model prediction
+predict.logit.train <- predict(logit1, data=train.dat, type = 'response') 
+predict.logit.test <- predict(logit1, newdata=test.dat, type = 'response') 
+
+## Tree based model prediction
+predict.tree.train <- predict(tree, newdata=train.dat)
+predict.tree.train.tab <- table(round(predict(tree, data=train.dat),3))
+predict.tree.train.tab
+
+predict.tree.test <- predict(tree, newdata=test.dat)
+predict.tree.test.tab <- table(round(predict(tree, newdata=test.dat),3))
+predict.tree.test.tab
+
+## Logit Gains
+library("gains")
+logitgains=gains(test.dat$Graduated,predict.logit.test)
+head(logitgains)
+logitgains
+
+
+## Plot Logit Gains
+names(logitgains)
+logitgains$mean.resp
+logitgains$max.prediction
+logitgains$depth
+plot(logitgains$depth,logitgains$mean.prediction,type = 'l',lty=3)
+points(logitgains$depth,logitgains$mean.resp,col='blue')
+plot(logitgains)
+
+
+## Tree Gains
+treegains=gains(test.dat$Graduated, predict.tree.test)
+head(treegains)
+treegains
+
+## Plot Tree Gains
+names(treegains)
+treegains$mean.resp
+treegains$max.prediction
+treegains$depth
+plot(treegains$depth,treegains$mean.prediction,type = 'l',lty=3)
+points(treegains$depth,treegains$mean.resp,col='blue')
+plot(treegains)
+```
+
